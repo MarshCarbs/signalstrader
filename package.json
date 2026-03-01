@@ -1,0 +1,32 @@
+{
+  "name": "polymarket-signal-trader",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "description": "Slim Polymarket signal trader (Redis -> CLOB)",
+  "main": "dist/index.js",
+  "scripts": {
+    "setup:env": "bash scripts/setup_env.sh",
+    "dev": "ts-node index.ts",
+    "start": "ts-node index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start:prod": "node dist/index.js",
+    "vm:start": "bash scripts/start_in_screen.sh",
+    "vm:stop": "bash scripts/stop_in_screen.sh",
+    "vm:update": "bash scripts/update_repo.sh",
+    "vm:set-shares": "bash scripts/set_shares_and_restart.sh"
+  },
+  "dependencies": {
+    "@polymarket/clob-client": "^4.1.2",
+    "@polymarket/order-utils": "^1.1.0",
+    "dotenv": "^16.4.5",
+    "ethers": "^5.7.2",
+    "ioredis": "^5.9.2",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.33",
+    "@types/ws": "^8.18.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
