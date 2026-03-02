@@ -186,7 +186,9 @@ export class SignalSubscriber {
       const ageMs = Date.now() - signal.timestampMs;
       if (ageMs > this.config.signalMaxAgeMs) {
         this.staleCount += 1;
-        logWarn(`Ignoring stale signal (${ageMs}ms old).`);
+        logWarn(
+          `Ignoring stale signal (${ageMs}ms old > ${this.config.signalMaxAgeMs}ms): ${signal.direction} ${signal.token} @ ${signal.limitPrice} [${signal.marketSlug}]`
+        );
         await this.onMarketSlug(signal.marketSlug, 'signal');
         return;
       }

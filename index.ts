@@ -3,6 +3,7 @@ import { loadConfig } from './src/config';
 import { logError, logInfo, logWarn } from './src/logger';
 import { resolveMarketBySlug } from './src/marketResolver';
 import { MarketWsConnection } from './src/marketWs';
+import { setupProcessOutputMirror } from './src/outputMirror';
 import { createPolymarketClient } from './src/polymarketClient';
 import { SignalSubscriber } from './src/signalSubscriber';
 import { StatusBoard } from './src/statusBoard';
@@ -10,26 +11,44 @@ import { TradeExecutor } from './src/tradeExecutor';
 
 let shuttingDown = false;
 const MARKET_RESOLVE_RETRY_MS = 5_000;
+const MARKET_RESOLVE_TIMEOUT_MS = 30_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function resolveMarketWithRetry(config: ReturnType<typeof loadConfig>, marketSlug: string) {
+  const startedAt = Date.now();
+  let lastErrorMessage = 'unknown';
   for (;;) {
     try {
       return await resolveMarketBySlug(marketSlug, config);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      logWarn(`Market resolve failed (${marketSlug}): ${message}. Retrying in 5 seconds...`);
-      await sleep(MARKET_RESOLVE_RETRY_MS);
+      lastErrorMessage = message;
+      const elapsed = Date.now() - startedAt;
+      const remaining = MARKET_RESOLVE_TIMEOUT_MS - elapsed;
+      if (remaining <= 0) {
+        break;
+      }
+      logWarn(
+        `Market resolve failed (${marketSlug}): ${message}. Retrying in 5 seconds (timeout in ${Math.ceil(
+          remaining / 1000
+        )}s)...`
+      );
+      await sleep(Math.min(MARKET_RESOLVE_RETRY_MS, remaining));
     }
   }
+  throw new Error(
+    `Market resolve timeout for ${marketSlug} after ${MARKET_RESOLVE_TIMEOUT_MS}ms. Last error: ${lastErrorMessage}`
+  );
 }
 
 async function main(): Promise<void> {
+  const outputFile = setupProcessOutputMirror();
   const config = loadConfig();
   logInfo('Starting signal trader...');
+  logInfo(`Terminal output mirror file: ${outputFile}`);
   logInfo(`Order mode: FOK only`);
   logInfo(`Shares per trade: ${config.sharesPerTrade}`);
   logInfo(`Redis target: ${config.redisHost}:${config.redisPort}/${config.redisChannel}${config.redisPassword ? ' (auth enabled)' : ''}`);
@@ -53,7 +72,14 @@ async function main(): Promise<void> {
       return;
     }
 
-    const market = await resolveMarketWithRetry(config, nextSlug);
+    let market;
+    try {
+      market = await resolveMarketWithRetry(config, nextSlug);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logWarn(`Active market update skipped (${source}, ${nextSlug}): ${message}`);
+      return;
+    }
     activeMarketSlug = market.marketSlug;
     tradeExecutor.updateMarket(market);
     wsConnection.updateMarket(market);
